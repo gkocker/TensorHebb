@@ -4,8 +4,6 @@ import matplotlib.pyplot as plt
 import seaborn as sns
 from scipy.linalg import norm
 from PIL import Image, ImageOps
-from inequality.gini import Gini as gini
-from scipy.optimize import minimize, minimize_scalar
 from scipy.signal import convolve2d
 from sklearn import preprocessing
 import tensortools as tt
@@ -19,9 +17,11 @@ labelsize = 8
 colors = plt.rcParams['axes.prop_cycle'].by_key()['color']
 colors = ['k']+colors
 
+
 def running_mean(x, N):
     cumsum = np.cumsum(np.insert(x, 0, 0)) 
     return (cumsum[N:] - cumsum[:-N]) / float(N)
+
 
 def unit_vector(vector):
     return vector / np.linalg.norm(vector)
@@ -80,7 +80,6 @@ def generate_inputs(im_dir='/Users/gabeo/Documents/projects/images/berkeley_segm
     for i in range(num_inputs):
 
         im_file = np.random.choice(im_files)
-    # for i, im_file in enumerate(im_files):
 
         x = Image.open(os.path.join(im_dir, im_file))
         x = ImageOps.grayscale(x)
@@ -93,14 +92,9 @@ def generate_inputs(im_dir='/Users/gabeo/Documents/projects/images/berkeley_segm
         end_y = start_y + yy
 
         x_new = x[start_x:end_x, start_y:end_y].astype(np.float32)
-    #     x_new = x_new - np.amin(x_new)
-    #     x_new = x_new / np.amax(x_new)
-    #     x_new = preprocessing.scale(x_new)
         x_new -= np.mean(x_new)
-        x_new = preprocessing.normalize(x_new)# - np.mean(x_new), norm='l2')
+        x_new = preprocessing.normalize(x_new)
         x_new -= np.mean(x_new)
-
-        # x_new += np.std(x_new)/2.
 
         inputs.append(x_new)
 
@@ -332,9 +326,6 @@ def plot_image_stack(ax, data, Nplot=4, cmap='cividis', cscale=.1):
 def plot_3pt_corr(ax, inputs, b=1, Nplot=4, Kplot=100, Nsmooth=31, cmap='cividis', cscale=.35):
 
     num_inputs, K = inputs.shape
-    # xplot = range(0, K, K//Kplot)
-    # inputs = inputs.T[xplot].T
-    # _, K = inputs.shape
 
     print(K)
     plot_ind = list(range(0, K, K//(Nplot)))
@@ -350,10 +341,12 @@ def plot_3pt_corr(ax, inputs, b=1, Nplot=4, Kplot=100, Nsmooth=31, cmap='cividis
 
     for i, z in enumerate(plot_ind):
         inputs2 = inputs * np.outer(inputs[:, z], np.ones(K,))
+
+        ### direct 3pt corr
         # mu[:, :, i] = inputsb.T.dot(inputs2) / num_inputs
         # mu[:, :, i] = np.einsum('ij,ik',inputs**b,inputs * np.outer(inputs[:, z], np.ones(K,))) / num_inputs
 
-        ### smoothed 3pt corr
+        ### smoothed 3pt corr for visualization
         mui = inputsb.T.dot(inputs2) / num_inputs
         mui = convolve2d(mui, np.ones((Nsmooth, Nsmooth)), mode='same', boundary='wrap')
         mui = mui[::Nsmooth//2, ::Nsmooth//2]
@@ -456,174 +449,6 @@ def run_orthog_approx_error(a=2, b=1, max_rank=4, Npix=10, replicates=4, datafil
     del ensemble
 
     return objectives
-
-
-def plot_fig_1(savefile='fig1.pdf', datafile_head='fig1_data', cmap='cividis', max_rank=4, Npix=10, Ninit=20, Nsmooth=30, cscale=0.35, data_dir="/Users/gabeo/Dropbox (BOSTON UNIVERSITY)/Papers/tensor_hebb/Code"):
-
-    fig = plt.figure(figsize=(5.67, 3.7))
-
-    ### plot example image patches
-    ax1 = fig.add_subplot(2, 3, 1, projection='3d')
-
-    inputs = generate_inputs(xx=Npix, yy=Npix)
-    num_inputs = inputs.shape[0]
-    scam, _ = plot_image_stack(ax1, data=inputs.reshape((num_inputs, Npix, Npix)), cscale=.1, cmap=cmap)
-    # ax1.set_xticks(range(Npix, 2))
-    # ax1.set_yticks(range(Npix, 2))
-    # ax1.set_zticks(range(Npix, 2))
-    ax1.set_xticks([])
-    ax1.set_yticks([])
-    ax1.set_zticks([])
-
-    # ax1.set_xticklabels(range(Npix, 2), fontsize=labelsize)
-    # ax1.set_yticklabels(range(Npix, 2), fontsize=labelsize)
-    # ax1.set_zticklabels(range(Npix, 2), fontsize=labelsize)
-
-    ### plot input correlation mu for a=1, b=2
-    a=1
-    b=2
-    num_inputs, K = inputs.shape
-    mu = np.einsum('ij,ik',inputs**b,inputs) / num_inputs
-
-    mu = convolve2d(mu, np.ones((Nsmooth, Nsmooth)), mode='same', boundary='wrap')
-    mu = mu[::Nsmooth//2, ::Nsmooth//2]
-
-    cmid = np.median(mu)
-    crange = np.amax(mu) - np.amin(mu)
-    clim = (cmid - cscale*crange, cmid + cscale*crange)
-
-    ax2 = fig.add_subplot(2, 3, 2)
-    ax2.imshow(mu, cmap=cmap, clim=clim)
-    ax2.set_xlabel('Pixel', fontsize=fontsize)
-    ax2.set_ylabel('Pixel', fontsize=fontsize)
-    ax2.set_title('3-point corr.\n(a,b)=(1,{})'.format(b), fontsize=fontsize)
-
-    # ax2.set_xticks(range(Npix, 2))
-    # ax2.set_yticks(range(Npix, 2))
-    # ax2.set_yticks(range(0, K//(Nsmooth//2), K//(Nsmooth//4)))
-    # ax2.set_xticks(range(0, K//(Nsmooth//2), K//(Nsmooth//4)))
-    # ax2.set_xticklabels(range(0, Npix, Npix//2), fontsize=labelsize)
-    # ax2.set_yticklabels(range(0, Npix, Npix//2), fontsize=labelsize)
-
-    # results_dict['panel2_corr_a=1_b=2'] = mu
-
-    ### plot input correlation for a=2, b=1
-    a=2
-    b=1
-
-    # mu = np.einsum('ij,ik,il',inputs**b,inputs,inputs) / num_inputs
-    ax3 = fig.add_subplot(2, 3, 3, projection='3d')
-    scam, plot_ind = plot_3pt_corr(ax3, inputs=inputs, b=b, cscale=0.25, cmap=cmap, Nsmooth=Nsmooth)
-
-    ax3.set_title('3-point corr.\n(a,b)=(2,{})'.format(b), fontsize=fontsize)
-
-    # ax3.set_xticks(range(Npix, 2))
-    # ax3.set_yticks(range(Npix, 2))
-    # ax3.set_zticks(range(len(plot_ind), 2))
-    # ax3.set_zticklabels(plot_ind, fontsize=labelsize)
-    ax3.set_xticks([])
-    ax3.set_yticks([])
-    ax3.set_zticks([])
-    ax3.set_xlabel('Pixel', fontsize=fontsize)
-    ax3.set_ylabel('Pixel', fontsize=fontsize)
-    ax3.set_zlabel('Pixel', fontsize=fontsize)
-
-    # results_dict = {}
-    # results_dict['panel3_corr_a=2_b=1'] = mu[:, :, plot_ind]
-    # datafile = datafile_head+'_panel3_corr.pkl'
-    # with open(datafile, 'wb') as handle:
-    #     pickle.dump(results_dict, handle)
-
-    ### plot error of orthogonal approximation (CP decomposition) for (a, b)=(2, 1) and (2, 2)
-    ax4 = fig.add_subplot(2, 3, 4)
-    datafile = os.path.join(data_dir, 'fig1_data_ensemble_a=2_b=1.pkl')
-
-    with open(datafile, 'rb') as handle:
-        results_dict = pickle.load(handle)
-
-    _ = plot_orthog_approx_error(ax4, results_dict, color=colors[0], label='(a,b)=(2,1)')
-
-    datafile = os.path.join(data_dir, 'fig1_data_ensemble_a=2_b=2.pkl')
-    with open(datafile, 'rb') as handle:
-        results_dict = pickle.load(handle)
-
-    _ = plot_orthog_approx_error(ax4, results_dict, color=colors[1], label='(a,b)=(2,2)')
-
-    ax4.set_xlabel('Rank of orth.\napproximation', fontsize=fontsize)
-    ax4.set_ylabel('MSE of orth.\napproximation', fontsize=fontsize)
-    ax4.legend(loc=0, frameon=False, fontsize=fontsize)
-    ax4.set_ylim((0, ax4.get_ylim()[1]))
-
-    ### learning dynamics for a=2, b=1
-    a = 2
-    b = 1
-    num_inputs, K = inputs.shape
-
-    Jt, _ = run_sim_return_traces(inputs=inputs, a=a, b=b, Nt=15000)
-
-    ax5 = fig.add_subplot(2, 3, 5)
-    plot_ind = np.random.choice(K, 5)
-    ax5.plot(Jt[:, plot_ind], linewidth=2)
-
-    ax5.set_xlabel('Time', fontsize=fontsize)
-    ax5.set_ylabel('Synaptic weight', fontsize=fontsize)
-
-    ### angle between weight vector and singular vector 
-    ax6 = fig.add_subplot(2, 3, 6)
-
-    # T = 15000
-    Ntplot = 200
-    # tplot = range(0, T, T//Ntplot)
-    datafile = os.path.join(data_dir, 'fig1_data_orth_error_a=2_b=1_c=0.pkl')
-    with open(datafile, 'rb') as handle:
-        results_dict = pickle.load(handle)
-
-    error_angle = results_dict['angle_factor_weights']
-
-    T = error_angle.shape[0]
-    tplot = range(0, T, T//Ntplot)
-
-    # error_angle = loop_initial_cond(a=2, b=1, c=0, p=2, Ninit=Ninit, Npix=Npix, Nt=tplot)
-    # results_dict['panel6_error_angle_a=2_b=1'] = error_angle
-
-    error_std = np.nanstd(error_angle, axis=1) / np.sqrt(Ninit)
-    error_mean = np.nanmean(error_angle, axis=1)
-    error_std = error_std[tplot]
-    error_mean = error_mean[tplot]
-
-    ax6.fill_between(tplot, error_mean + error_std, error_mean - error_std, alpha=0.2, color=colors[0])
-    ax6.plot(tplot, error_mean, linewidth=2, color=colors[0], label='(a,b)=(2,1)')
-
-    datafile = os.path.join(data_dir, 'fig1_data_orth_error_a=2_b=2_c=0.pkl')
-    with open(datafile, 'rb') as handle:
-        results_dict = pickle.load(handle)
-
-    error_angle = results_dict['angle_factor_weights']
-    # error_angle = loop_initial_cond(a=2, b=1, c=0, p=2, Ninit=Ninit, Npix=Npix, Nt=tplot)
-    # results_dict['panel6_error_angle_a=2_b=1'] = error_angle
-
-    error_std = np.nanstd(error_angle, axis=1) / np.sqrt(Ninit)
-    error_mean = np.nanmean(error_angle, axis=1)
-    error_std = error_std[tplot]
-    error_mean = error_mean[tplot]
-
-    ax6.fill_between(tplot, error_mean + error_std, error_mean - error_std, alpha=0.2, color=colors[1])
-    ax6.plot(tplot, error_mean, linewidth=2, color=colors[1], label='(a,b)=(2,2)')
-
-    ax6.set_xlabel('Time', fontsize=fontsize)
-    ax6.set_ylabel('Angle between J and u', fontsize=fontsize)
-
-    ax6.set_ylim((-.1, np.pi/2+.1))
-    ax6.set_yticks((0, np.pi/4, np.pi/2))
-    ax6.set_yticklabels(['0', r'$\pi/4$', r'$\pi/2$'], fontsize=labelsize)
-    ax6.legend(loc=0, frameon=False, fontsize=fontsize)
-
-    sns.despine(fig)
-    fig.tight_layout()
-    fig.savefig(savefile)
-
-    # with open(datafile, 'wb') as handle:
-    #     pickle.dump(results_dict, handle)
 
 
 def plot_fig_natural_images(savefile='fig_natim.pdf', datafile_head='fig1_data', cmap='cividis', max_rank=4, Npix=10, Ninit=20, Nsmooth=30, cscale=0.35, data_dir="/Users/gabeo/Dropbox (BOSTON UNIVERSITY)/Papers/tensor_hebb/Code"):
@@ -868,16 +693,12 @@ def plot_fig_natural_images(savefile='fig_natim.pdf', datafile_head='fig1_data',
 
 if __name__ == '__main__':
     
-    plot_fig_natural_images(Npix=35)
-    
-    # plot_fig_1(Npix=35, max_rank=30)
-
+    ### compute CP deposition of the input correlations
     # objectives = run_orthog_approx_error(a=2, b=1, max_rank=30, Npix=35, replicates=4, rerun=True)
     # objectives = run_orthog_approx_error(a=2, b=2, max_rank=30, Npix=35, replicates=4, rerun=True)
 
     # error_angle = loop_initial_cond(a=2, b=1, c=0, p=2, Ninit=20, Npix=35, Nt=500000, rerun=True)
     # error_angle = loop_initial_cond(a=2, b=2, c=0, p=2, Ninit=20, Npix=35, Nt=500000, rerun=True)
-
 
     ### compute svd of input correlation tensors
     # num_input_samples = 10
@@ -887,3 +708,6 @@ if __name__ == '__main__':
     #     a = 2
     #     filename = 'inputs_factors_Npix{}_a{}_iter{}.pkl'.format(Npix, a, i)
     #     _, _, _ = generate_inputs_compute_factors(xx=Npix, yy=Npix, a=a, savefile=filename)
+
+    ### plot figure
+    # plot_fig_natural_images(Npix=35)
